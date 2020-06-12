@@ -94,9 +94,9 @@
     sysctl_set: yes
   become: yes
   with_items:
-   - net.bridge.bridge-nf-call-arptables
-   - net.bridge.bridge-nf-call-ip6tables
-   - net.bridge.bridge-nf-call-iptables
+    - net.bridge.bridge-nf-call-arptables
+    - net.bridge.bridge-nf-call-ip6tables
+    - net.bridge.bridge-nf-call-iptables
 
 - name: Set sysctl RCVBUF max parameter for testbed
   sysctl:
@@ -130,12 +130,14 @@
       when: home_path is not defined
     - debug: msg="{{ home_path }}"
 
+# root_path is defined in group_vars/vm_host/main.yml
+# ~/veos-vm
 - name: Ensure {{ root_path }} exists
   file: path={{ root_path }} state=directory
 
 - name: Install cleanup script
   template: src=cleanup.sh.j2
-            dest={{ root_path }}/cleanup.sh
+    dest={{ root_path }}/cleanup.sh
 
 - name: Copy vm_resumer.py to the {{ root_path }}
   become: true
@@ -146,21 +148,21 @@
 
 - name: Retrieve a list of the defined VMs
   virt: command=list_vms
-        uri=qemu:///system
+    uri=qemu:///system
   register: vm_list_defined
   become: true
 
 - name: Retrieve a list of the running VMs
   virt: command=list_vms
-        uri=qemu:///system
-        state=running
+    uri=qemu:///system
+    state=running
   register: vm_list_running
   become: true
 
 - name: Retrieve a list of the paused VMs
   virt: command=list_vms
-        uri=qemu:///system
-        state=pause
+    uri=qemu:///system
+    state=pause
   register: vm_list_paused
   become: true
 
@@ -174,6 +176,7 @@
   set_fact: VM_hosts="{{ VM_hosts | first_n_elements(VM_num) }}"
   when: VM_num is defined and VM_num|int > 0
 
+# VM_base is an anchor while the vm_offset is the actual VM id from VM_base
 - name: Generate vm list of target VMs
   set_fact: VM_targets={{ VM_hosts | filter_vm_targets(topology['VMs'], VM_base) | sort }}
   when: topology['VMs'] is defined

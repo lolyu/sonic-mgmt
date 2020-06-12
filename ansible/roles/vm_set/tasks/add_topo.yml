@@ -1,4 +1,3 @@
-
 # The PTF image built from different branches may be incompatible. The ptf_imagetag variable added here is to
 # support using different PTF images for different branches. When the ptf_imagetag variable is not specified,
 # the PTF image with default "latest" tag will be used. When a specific PTF image version is required, we can
@@ -10,6 +9,7 @@
     ptf_imagetag: "latest"
   when: ptf_imagetag is not defined
 
+# docker login variable defined in `ansible/vars/docker_registry.yml`
 - name: Login into docker registry
   docker_login:
     registry: "{{ docker_registry_host }}"
@@ -17,6 +17,7 @@
     password: "{{ docker_registry_password }}"
   become: yes
 
+# ptf container has ability to interact with host network stack
 - name: Create ptf container ptf_{{ vm_set_name }}
   docker_container:
     name: ptf_{{ vm_set_name }}

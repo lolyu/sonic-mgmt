@@ -56,6 +56,7 @@ server_1
 topologies=['t1', 't1-lag', 't1-64-lag', 't1-64-lag-clet', 't0', 't0-16', 't0-56', 't0-52', 'ptf32', 'ptf64', 't0-64', 't0-64-32', 't0-116']
 
 [sonic]
+# the serial console for vlab-01 is 127.0.0.1:9000
 vlab-01 ansible_host=10.250.0.101 type=kvm hwsku=Force10-S6000 serial_port=9000
 vlab-02 ansible_host=10.250.0.102 type=kvm hwsku=Force10-S6100 serial_port=9000
 vlab-03 ansible_host=10.250.0.105 type=kvm hwsku=Force10-S6000 serial_port=9001
