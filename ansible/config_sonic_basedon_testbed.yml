@@ -34,311 +34,330 @@
 - hosts: sonic
   gather_facts: no
   tasks:
+    - block:
+        - name: set default testbed file
+          set_fact:
+            testbed_file: testbed.csv
+          when: testbed_file is not defined
 
-  - block:
-    - name: set default testbed file
-      set_fact:
-        testbed_file: testbed.csv
-      when: testbed_file is not defined
+        - name: Set default dut index
+          set_fact:
+            dut_index: 0
+          when: dut_index is not defined
 
-    - name: Set default dut index
-      set_fact:
-        dut_index: 0
-      when: dut_index is not defined
+        # test_facts returns:
+        #   testbed_facts: the line that in `testbed.csv`
+        #   testcase_topo: the dict contains mapping from topo to testcases
+        - name: Gathering testbed information
+          test_facts: testbed_name="{{ testbed_name }}" testbed_file="{{ testbed_file }}"
+          delegate_to: localhost
 
-    - name: Gathering testbed information
-      test_facts: testbed_name="{{ testbed_name }}" testbed_file="{{ testbed_file }}"
+        - fail: msg="The DUT you are trying to run test does not belongs to this testbed"
+          when: testbed_facts['duts'][dut_index] != inventory_hostname
+
+        - name: set testbed_type
+          set_fact:
+            topo: "{{ testbed_facts['topo'] }}"
+
+        - name: set vm
+          set_fact:
+            vm_base: "{{ testbed_facts['vm_base'] }}"
+          when: "testbed_facts['vm_base'] != ''"
+      when: testbed_name is defined
+
+    # returns:
+    #   vm_topo_config: the parse result of `ansible/vars/topo_{topo}.yml`
+    - topo_facts: topo={{ topo }}
       delegate_to: localhost
 
-    - fail: msg="The DUT you are trying to run test does not belongs to this testbed"
-      when: testbed_facts['duts'][dut_index] != inventory_hostname
-
-    - name: set testbed_type
+    - name: set default vm file path
       set_fact:
-        topo: "{{ testbed_facts['topo'] }}"
+        vm_file: veos
+      when: vm_file is not defined
 
-    - name: set vm
+    - set_fact:
+        VM_topo: "{% if 'ptf' in topo %}False{% else %}True{% endif %}"
+        remote_dut: "{{ ansible_ssh_host }}"
+
+    # returns:
+    #   neighbor_eosvm_mgmt: neighbor eos vm mgmt ip address
+    #   topoall
+    - name: gather testbed VM informations
+      testbed_vm_info: base_vm={{ testbed_facts['vm_base'] }} topo={{ testbed_facts['topo'] }} vm_file={{ vm_file }}
+      delegate_to: localhost
+      when: "VM_topo | bool"
+
+    # returns
+    #   port_alias: alias list
+    #   port_name_map: alias to interfaces
+    #   port_alias_map: interfaces to alias
+    #   port_speed: port speed
+    - name: find interface name mapping and individual interface speed if defined
+      port_alias: hwsku="{{ hwsku }}"
+
+    # remove disabled interfaces
+    - name: find all enabled host_interfaces
       set_fact:
-        vm_base: "{{ testbed_facts['vm_base'] }}"
-      when: "testbed_facts['vm_base'] != ''"
-    when: testbed_name is defined
+        host_if_indexes: "{{ vm_topo_config['host_interfaces'] | difference(vm_topo_config['disabled_host_interfaces']) }}"
 
-  - topo_facts: topo={{ topo }}
-    delegate_to: localhost
-
-  - name: set default vm file path
-    set_fact:
-      vm_file: veos
-    when: vm_file is not defined
-
-  - set_fact:
-      VM_topo: "{% if 'ptf' in topo %}False{% else %}True{% endif %}"
-      remote_dut: "{{ ansible_ssh_host }}"
-
-  - name: gather testbed VM informations
-    testbed_vm_info: base_vm={{ testbed_facts['vm_base'] }} topo={{ testbed_facts['topo'] }} vm_file={{ vm_file }}
-    delegate_to: localhost
-    when: "VM_topo | bool"
-
-  - name: find interface name mapping and individual interface speed if defined
-    port_alias: hwsku="{{ hwsku }}"
-
-  - name: find all enabled host_interfaces
-    set_fact:
-      host_if_indexes: "{{ vm_topo_config['host_interfaces'] | difference(vm_topo_config['disabled_host_interfaces']) }}"
-
-  - name: find all vlan interface names for T0 topology
-    set_fact:
-      vlan_intfs: "{{ vlan_intfs|default([])}} + ['{{ port_alias[item] }}' ]"
-    with_items: "{{ host_if_indexes }}"
-    when: "('host_interfaces' in vm_topo_config) and ('tor' in vm_topo_config['dut_type'] | lower)"
-
-  - name: find all vlan configurations for T0 topology
-    vlan_config:
-      vm_topo_config: "{{ vm_topo_config }}"
-      port_alias: "{{ port_alias }}"
-      vlan_config: "{{ vlan_config | default(None) }}"
-    delegate_to: localhost
-    when: "('host_interfaces' in vm_topo_config) and ('tor' in vm_topo_config['dut_type'] | lower)"
-
-  - name: find all interface indexes mapping connecting to VM
-    set_fact:
-      interface_to_vms: "{{ interface_to_vms|default({}) | combine({ item.key: item.value['interface_indexes'] }) }}"
-    with_dict: "{{ vm_topo_config['vm'] }}"
-
-  - name: find all interface indexes connecting to VM
-    set_fact:
-      ifindex_to_vms: "{{ ifindex_to_vms|default([]) }} + {{ item.value['interface_indexes']}}"
-    with_dict: "{{ vm_topo_config['vm'] }}"
-
-  - name: find all interface names
-    set_fact:
-      intf_names: "{{ intf_names | default({}) | combine({item.key: port_alias[item.value[0]|int:item.value[-1]|int+1] }) }}"
-    with_dict: "{{ interface_to_vms }}"
-
-  - name: create minigraph file in ansible minigraph folder
-    template: src=templates/minigraph_template.j2
-              dest=minigraph/{{ inventory_hostname}}.{{ topo }}.xml
-    delegate_to: localhost
-    when: local_minigraph is defined and local_minigraph|bool == true
-
-  - block:
-    - name: Init telemetry keys
+    # vlan_intfs: the alias of the interfaces defined in topo
+    - name: find all vlan interface names for T0 topology
       set_fact:
-        server_key: ""
-        server_csr: ""
-        server_cer: ""
-        dsmsroot_key: ""
-        dsmsroot_csr: ""
-        dsmsroot_cer: ""
-        dir_path: ""
+        vlan_intfs: "{{ vlan_intfs|default([])}} + ['{{ port_alias[item] }}' ]"
+      with_items: "{{ host_if_indexes }}"
+      when: "('host_interfaces' in vm_topo_config) and ('tor' in vm_topo_config['dut_type'] | lower)"
 
-    - name: read server key
+    # returns:
+    #   vlan_configs
+    - name: find all vlan configurations for T0 topology
+      vlan_config:
+        vm_topo_config: "{{ vm_topo_config }}"
+        port_alias: "{{ port_alias }}"
+        vlan_config: "{{ vlan_config | default(None) }}"
+      delegate_to: localhost
+      when: "('host_interfaces' in vm_topo_config) and ('tor' in vm_topo_config['dut_type'] | lower)"
+
+    # interface_to_vms: eos VM to its connecting interface index
+    - name: find all interface indexes mapping connecting to VM
       set_fact:
-        server_key: "{{ telemetry_certs['server_key'] }}"
-      when: telemetry_certs['server_key'] is defined
+        interface_to_vms: "{{ interface_to_vms|default({}) | combine({ item.key: item.value['interface_indexes'] }) }}"
+      with_dict: "{{ vm_topo_config['vm'] }}"
 
-    - name: read server csr
+    - name: find all interface indexes connecting to VM
       set_fact:
-        server_csr: "{{ telemetry_certs['server_csr'] }}"
-      when: telemetry_certs['server_csr'] is defined
+        ifindex_to_vms: "{{ ifindex_to_vms|default([]) }} + {{ item.value['interface_indexes']}}"
+      with_dict: "{{ vm_topo_config['vm'] }}"
 
-    - name: read server cer
+    # intf_names: vm to its connecting port(port alias)
+    - name: find all interface names
       set_fact:
-        server_cer: "{{ telemetry_certs['server_cer'] }}"
-      when: telemetry_certs['server_cer'] is defined
+        intf_names: "{{ intf_names | default({}) | combine({item.key: port_alias[item.value[0]|int:item.value[-1]|int+1] }) }}"
+      with_dict: "{{ interface_to_vms }}"
 
-    - name: read dsmsroot key
-      set_fact:
-        dsmsroot_key: "{{ telemetry_certs['dsmsroot_key'] }}"
-      when: telemetry_certs['dsmsroot_key'] is defined
+    # create minigraph and stores in ansible/minigraph/{DUT}.topo.xml
+    - name: create minigraph file in ansible minigraph folder
+      template: src=templates/minigraph_template.j2
+        dest=minigraph/{{ inventory_hostname}}.{{ topo }}.xml
+      delegate_to: localhost
+      when: local_minigraph is defined and local_minigraph|bool == true
 
-    - name: read dsmsroot csr
-      set_fact:
-        dsmsroot_csr: "{{ telemetry_certs['dsmsroot_csr'] }}"
-      when: telemetry_certs['dsmsroot_csr'] is defined
+    - block:
+        - name: Init telemetry keys
+          set_fact:
+            server_key: ""
+            server_csr: ""
+            server_cer: ""
+            dsmsroot_key: ""
+            dsmsroot_csr: ""
+            dsmsroot_cer: ""
+            dir_path: ""
 
-    - name: read dsmsroot cer
-      set_fact:
-        dsmsroot_cer: "{{ telemetry_certs['dsmsroot_cer'] }}"
-      when: telemetry_certs['dsmsroot_cer'] is defined
+        - name: read server key
+          set_fact:
+            server_key: "{{ telemetry_certs['server_key'] }}"
+          when: telemetry_certs['server_key'] is defined
 
-    - name: read directory path
-      set_fact:
-        dir_path: "{{ telemetry_certs['dir_path'] }}"
-      when: telemetry_certs['dir_path'] is defined
+        - name: read server csr
+          set_fact:
+            server_csr: "{{ telemetry_certs['server_csr'] }}"
+          when: telemetry_certs['server_csr'] is defined
 
-    - name: Create telemetry directory
-      file:
-        path: "{{ dir_path }}"
-        state: directory
-        mode: '0755'
-      become: true
+        - name: read server cer
+          set_fact:
+            server_cer: "{{ telemetry_certs['server_cer'] }}"
+          when: telemetry_certs['server_cer'] is defined
 
-    - name: Create telemetry server private key
-      openssl_privatekey:
-        path: "{{ server_key }}"
-        size: 2048
-        mode: '0755'
-      become: true
+        - name: read dsmsroot key
+          set_fact:
+            dsmsroot_key: "{{ telemetry_certs['dsmsroot_key'] }}"
+          when: telemetry_certs['dsmsroot_key'] is defined
 
-    - name: create telemetry server csr
-      openssl_csr:
-        path: "{{ telemetry_certs['server_csr'] }}"
-        privatekey_path: "{{ server_key }}"
-      become: true
+        - name: read dsmsroot csr
+          set_fact:
+            dsmsroot_csr: "{{ telemetry_certs['dsmsroot_csr'] }}"
+          when: telemetry_certs['dsmsroot_csr'] is defined
 
-    - name: Generate a Self Signed OpenSSL telemetry server certificate
-      openssl_certificate:
-        path: "{{ server_cer }}"
-        privatekey_path: "{{ server_key }}"
-        csr_path: "{{ server_csr }}"
-        subject:
-          commonName: ndastreamingservertest
-        provider: selfsigned
-      become: true
+        - name: read dsmsroot cer
+          set_fact:
+            dsmsroot_cer: "{{ telemetry_certs['dsmsroot_cer'] }}"
+          when: telemetry_certs['dsmsroot_cer'] is defined
 
-    - name: Create telemetry dsmsroot private key
-      openssl_privatekey:
-        path: "{{ dsmsroot_key }}"
-        size: 2048
-        mode: '0755'
-      become: true
+        - name: read directory path
+          set_fact:
+            dir_path: "{{ telemetry_certs['dir_path'] }}"
+          when: telemetry_certs['dir_path'] is defined
 
-    - name: create telemetry dsmsroot csr
-      openssl_csr:
-        path: "{{ dsmsroot_csr }}"
-        privatekey_path: "{{ dsmsroot_key }}"
-      become: true
+        - name: Create telemetry directory
+          file:
+            path: "{{ dir_path }}"
+            state: directory
+            mode: "0755"
+          become: true
 
-    - name: Generate a Self Signed OpenSSL telemetry dsmsroot certificate
-      openssl_certificate:
-        path: "{{ dsmsroot_cer }}"
-        privatekey_path: "{{ dsmsroot_key }}"
-        csr_path: "{{ dsmsroot_csr }}"
-        subject:
-          commonName: ndastreamingclienttest
-        provider: selfsigned
-      become: true
+        - name: Create telemetry server private key
+          openssl_privatekey:
+            path: "{{ server_key }}"
+            size: 2048
+            mode: "0755"
+          become: true
 
-  - block:
-      - name: saved original minigraph file in SONiC DUT(ignore errors when file doesnot exist)
-        shell: mv /etc/sonic/minigraph.xml /etc/sonic/minigraph.xml.orig
-        become: true
-        ignore_errors: true
+        - name: create telemetry server csr
+          openssl_csr:
+            path: "{{ telemetry_certs['server_csr'] }}"
+            privatekey_path: "{{ server_key }}"
+          become: true
 
-      - name: create new minigraph file for SONiC device
-        template: src=templates/minigraph_template.j2
-                  dest=/etc/sonic/minigraph.xml
-        become: true
+        - name: Generate a Self Signed OpenSSL telemetry server certificate
+          openssl_certificate:
+            path: "{{ server_cer }}"
+            privatekey_path: "{{ server_key }}"
+            csr_path: "{{ server_csr }}"
+            subject:
+              commonName: ndastreamingservertest
+            provider: selfsigned
+          become: true
 
-      - name: Test if configlet script exist
-        stat:
+        - name: Create telemetry dsmsroot private key
+          openssl_privatekey:
+            path: "{{ dsmsroot_key }}"
+            size: 2048
+            mode: "0755"
+          become: true
+
+        - name: create telemetry dsmsroot csr
+          openssl_csr:
+            path: "{{ dsmsroot_csr }}"
+            privatekey_path: "{{ dsmsroot_key }}"
+          become: true
+
+        - name: Generate a Self Signed OpenSSL telemetry dsmsroot certificate
+          openssl_certificate:
+            path: "{{ dsmsroot_cer }}"
+            privatekey_path: "{{ dsmsroot_key }}"
+            csr_path: "{{ dsmsroot_csr }}"
+            subject:
+              commonName: ndastreamingclienttest
+            provider: selfsigned
+          become: true
+
+    - block:
+        - name: saved original minigraph file in SONiC DUT(ignore errors when file doesnot exist)
+          shell: mv /etc/sonic/minigraph.xml /etc/sonic/minigraph.xml.orig
+          become: true
+          ignore_errors: true
+
+        - name: create new minigraph file for SONiC device
+          template: src=templates/minigraph_template.j2
+            dest=/etc/sonic/minigraph.xml
+          become: true
+
+        - name: Test if configlet script exist
+          stat:
             path: vars/configlet/{{ topo }}/apply_clet.sh
-        register: stat_result
-        delegate_to: localhost
+          register: stat_result
+          delegate_to: localhost
 
-      - name: debug print stat_result
-        debug:
-          msg: Stat result is {{ stat_result }}
+        - name: debug print stat_result
+          debug:
+            msg: Stat result is {{ stat_result }}
 
-      - name: Copy corresponding configlet files if exist
-        copy: src=vars/configlet/{{ topo }}/
-              dest=/etc/sonic/
-        become: true
-        when: stat_result.stat.exists is defined and stat_result.stat.exists
+        - name: Copy corresponding configlet files if exist
+          copy: src=vars/configlet/{{ topo }}/
+            dest=/etc/sonic/
+          become: true
+          when: stat_result.stat.exists is defined and stat_result.stat.exists
 
-      - name: Init account key and proxy
-        set_fact:
+        - name: Init account key and proxy
+          set_fact:
             core_key: ""
             core_proxy: ""
 
-      - name: Test if core_analyzer.rc.json exists
-        stat:
+        - name: Test if core_analyzer.rc.json exists
+          stat:
             path: /etc/sonic/core_analyzer.rc.json
-        register: rc_stat
+          register: rc_stat
 
-      - name: read account key
-        set_fact:
+        - name: read account key
+          set_fact:
             core_key: "{{ corefile_uploader['azure_sonic_core_storage']['account_key'] }}"
-        when: rc_stat.stat.exists is defined and rc_stat.stat.exists and corefile_uploader['azure_sonic_core_storage']['account_key'] is defined
+          when: rc_stat.stat.exists is defined and rc_stat.stat.exists and corefile_uploader['azure_sonic_core_storage']['account_key'] is defined
 
-      - name: read https proxy
-        set_fact:
+        - name: read https proxy
+          set_fact:
             core_proxy: "{{ corefile_uploader['env']['https_proxy'] }}"
-        when: rc_stat.stat.exists is defined and rc_stat.stat.exists and corefile_uploader['env']['https_proxy'] is defined
+          when: rc_stat.stat.exists is defined and rc_stat.stat.exists and corefile_uploader['env']['https_proxy'] is defined
 
-      - name: Put secret in core_analyzer.rc.json
-        lineinfile:
+        - name: Put secret in core_analyzer.rc.json
+          lineinfile:
             name: /etc/sonic/core_analyzer.rc.json
-            regexp: '(^.*)account_key'
+            regexp: "(^.*)account_key"
             line: '\1account_key": "{{ core_key }}",'
             backrefs: yes
-        become: true
-        when: core_key != ""
+          become: true
+          when: core_key != ""
 
-      - name: Put https-proxy in core_analyzer.rc.json
-        lineinfile:
+        - name: Put https-proxy in core_analyzer.rc.json
+          lineinfile:
             name: /etc/sonic/core_analyzer.rc.json
-            regexp: '(^.*)https_proxy'
+            regexp: "(^.*)https_proxy"
             line: '\1https_proxy": "{{ core_proxy }}"'
             backrefs: yes
-        become: true
-        when: core_proxy != ""
+          become: true
+          when: core_proxy != ""
 
-      - name: enable core uploader service
-        become: true
-        command: systemctl enable core_uploader.service
-        when: core_key != ""
+        - name: enable core uploader service
+          become: true
+          command: systemctl enable core_uploader.service
+          when: core_key != ""
 
-      - name: start core uploader service
-        become: true
-        command: systemctl start core_uploader.service
-        when: core_key != ""
+        - name: start core uploader service
+          become: true
+          command: systemctl start core_uploader.service
+          when: core_key != ""
 
-      - name: Replace snmp community string
-        lineinfile:
+        - name: Replace snmp community string
+          lineinfile:
             name: /etc/sonic/snmp.yml
-            regexp: '^snmp_rocommunity:'
-            line: 'snmp_rocommunity: {{ snmp_rocommunity }}'
-        become: true
+            regexp: "^snmp_rocommunity:"
+            line: "snmp_rocommunity: {{ snmp_rocommunity }}"
+          become: true
 
-      - name: disable automatic minigraph update if we are deploying new minigraph into SONiC
-        lineinfile:
+        - name: disable automatic minigraph update if we are deploying new minigraph into SONiC
+          lineinfile:
             name: /etc/sonic/updategraph.conf
-            regexp: '^enabled='
-            line: 'enabled=false'
-        become: true
-        register: updategraph_conf
+            regexp: "^enabled="
+            line: "enabled=false"
+          become: true
+          register: updategraph_conf
 
-      - name: restart automatic minigraph update service
-        become: true
-        service:
-          name: updategraph
-          state: restarted
-        when: updategraph_conf.changed
+        - name: restart automatic minigraph update service
+          become: true
+          service:
+            name: updategraph
+            state: restarted
+          when: updategraph_conf.changed
 
-      - name: docker status
-        shell: docker ps
-        register: docker_status
+        - name: docker status
+          shell: docker ps
+          register: docker_status
 
-      - debug: msg={{ docker_status.stdout_lines }}
+        - debug: msg={{ docker_status.stdout_lines }}
 
-      - name: execute cli "config load_minigraph -y" to apply new minigraph
-        become: true
-        shell: config load_minigraph -y
+        - name: execute cli "config load_minigraph -y" to apply new minigraph
+          become: true
+          shell: config load_minigraph -y
 
-      - name: execute cli "config bgp startup all" to bring up all bgp sessions for test
-        become: true
-        shell: config bgp startup all
+        - name: execute cli "config bgp startup all" to bring up all bgp sessions for test
+          become: true
+          shell: config bgp startup all
 
-      - name: execute configlet application script, which applies configlets in strict order.
-        become: true
-        shell: bash "/etc/sonic/apply_clet.sh"
-        when: stat_result.stat.exists is defined and stat_result.stat.exists
+        - name: execute configlet application script, which applies configlets in strict order.
+          become: true
+          shell: bash "/etc/sonic/apply_clet.sh"
+          when: stat_result.stat.exists is defined and stat_result.stat.exists
 
-      - name: execute cli "config save -y" to save current minigraph as startup-config
-        become: true
-        shell: config save -y
-        when: save is defined and save|bool == true
-    when: deploy is defined and deploy|bool == true
+        - name: execute cli "config save -y" to save current minigraph as startup-config
+          become: true
+          shell: config save -y
+          when: save is defined and save|bool == true
+      when: deploy is defined and deploy|bool == true
