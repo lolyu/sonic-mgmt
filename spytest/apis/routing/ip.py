@@ -170,7 +170,7 @@ def ping(dut, addresses, family='ipv4', **kwargs):
     if not out:
         st.error("Failed to get the ping output.")
         return False
-    if '0' < out[0][3] <= '100':
+    if '0' < out[0][4] <= '100':
         st.error("Ping failed with packet loss.")
         return False
     return True
