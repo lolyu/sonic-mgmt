@@ -1089,10 +1089,15 @@ def get_ifconfig_gateway(dut, interface='eth0'):
     :return:
     """
 
-    cmd = "sudo route -n"
-    output = st.show(dut, cmd)
-    gateway_list = [row['gateway'] for row in output if 'G' in row['flags'] and row['iface'] == interface]
-    return None if len(gateway_list) == 0 else gateway_list[0]
+    cmd = "sudo ip route show table all"
+    output = st.show(dut, cmd, skip_tmpl=True)
+    gateway_re = re.compile(r"default via (\d+\.\d+\.\d+\.\d+) dev %s" %
+                            interface)
+    for line in out.splitlines():
+        try:
+            return gateway_re.search(line).group(1)
+        except AttributeError:
+            pass
 
 
 def get_frr_config(conn_obj, device="dut"):
