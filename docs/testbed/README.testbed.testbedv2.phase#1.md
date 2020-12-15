@@ -1,0 +1,179 @@
+# testbed v2 design
+
+## connection db schema
+* requirements:
+  * dataset in file:
+    * `sonic_<lab_name>_devices.csv`
+    * `sonic_<lab_name>_links.csv`
+  * operations:
+    * current `conn_graph_facts` ops:
+      * get host device info
+      * get host connection info
+      * get assigned vlans info
+        * vlan ids
+        * vlan ids list
+        * peer port mode
+        * peer vlan ids
+        * peer vlan ids list
+* connection db schema:
+  * `LAB_CONNECTION_GRAPH_VERSIONS`:
+    * zset of md5sum values of connection graph files
+      * scores are the timestamps of md5sum values to ensure they are chronological
+      * with the last one in zset are the current-in-use connection graph md5sum value and its added timestamp
+    * users that wish to provision the db will check to see if the md5sum value of connection graph file is in `LAB_CONNECTION_GRAPH_VERSIONS`
+      * if `yes`, stop provision
+        * prevent users with dated connection graph file try to provision the db.
+      * if `no`, try to provision and add the md5sum value to `LAB_CONNECTION_GRAPH_VERSIONS` with current time as score.
+    * server daemon will trim `LAB_CONNECTION_GRAPH_VERSIONS` to keep most-recent 100 md5sum values.
+  * `LAB_META`
+    * `server_state`:
+      * `active`
+      * `provisioning`
+      * `down`
+  * `SWITCH_TABLE:switch_name`
+    * `HwSku`
+    * `ManagementIp`
+    * `mgmtip`
+    * `ManagementGw`
+    * `type`
+      * `leaf_fanout`
+      * `root_fanout`
+  * `DUT_TABLE:dut_name`
+    * `HwSku`
+    * `ManagementIp`
+    * `mgmtip`
+    * `ManagementGw`
+    * `provision_status`
+      * `not provisioned`
+      * `in progress`
+      * `provisioned/unique id`
+  * `SERVER_TABLE:server_name`
+    * `HwSku`
+    * `ManagementIp`
+    * `mgmtip`
+    * `ManagementGw`
+  * `PORT_LIST:<switch_name|dut_name|server_name>`
+    * set storing all the ports of a device
+  * `PORT_TABLE:switch_name:port_name`
+    * `bandwidth`
+    * `vlan_type`
+      * `access`
+      * `trunk`
+    * `vlan_ids`
+      * string of assigned vlan ids
+    * `phypeer_port`
+      * physical peer port, FK to `PORT_TABLE`
+  * `VLANIDPOOL_SET`:
+    * set of unique available vlan ids
+  * `VIRTLINKS_TABLE:endport0:endport1`: `endport` is FK to `PORT_TABLE`
+    * `status`
+      * `active`
+      * `inactive`
+
+## phase one
+* in phase one, we only cover the connection db setup and provision.
+* Ansible variables added:
+  * `enable_connection_db`: enable setup and provision connection db
+  * `connection_db_host`: specifies which server to use
+  * `connection_db_mapping`: we store the data from different connection graph files in different db.
+    * like `{'str': 0, 'str2': 1}`
+  * `enfornce_provision_server_daemon`: enforce install server daemon even there is one running.
+  * `disable_connection_db`
+* db config:
+  * enable `AOF`
+  * binds to `0.0.0.0`
+  * disable authentication
+  * enable all keyspace events
+
+### db setup
+* Ansible role `connection_db`
+  * called in `add_topo` with `action: start_db` if `enable_connection_db` is `True`
+    * ensure Redis and py-redis is installed.
+      * if Redis is newly-installed
+        * initialize each db based on `connection_db_mapping`
+        * init `server_state` to `down`
+    * ensure server daemon is running.
+      * if `enforce_provision_server_daemon` is `True`, enforce re-deploy server daemon
+  * called in `remove_topo` with `action: stop_db` if `disable_connection_db` is `True`
+    * ensure server daemon is stopped
+    * ensure Redis and py-redis is removed 
+
+
+### db provision
+* ansible library `provision_connection_db`:
+  * called in `add_topo`
+  * parse devices and connection links
+  * calls `provision_connection_db` rpc call.
+* what db server `provision_connection_db` does?
+  1. acquire db provision lock
+     * if wait timeout, raises an error to abort `add_topo`
+  2. check md5sum is in `LAB_CONNECTION_GRAPH_VERSIONS`
+     * if `yes`, releas lock and returns.
+  3. change `server_state` to `provisioning`
+  4. remove all keys in db
+  5. add_device
+  6. add_phy_connection
+  7. change `server_state` to `active`
+  8. release lock and returns
+
+### connection_graph_facts
+* add extra parameters `conn_graph_facts_src`, could be either `from_db` or `from_file`
+  * if `from_db`, retrieve those data from connection db
+    * should ensure `server_state` is active
+  * if `from_file`, fall back to the orignal function
+
+## phase 2
+### topology description
+```
+topology:
+  host_interfaces:
+    - "0.0"
+    - "0.1"
+    - "0.2"
+    - "0.3"
+    - "1.0"
+    - "1.1"
+    - "1.2"
+    - "1.3"
+    - "2.0"
+    - "2.1"
+    - "2.2"
+    - "2.3"
+    - "3.0"
+    - "3.1"
+    - "3.2"
+    - "3.3"
+  peer_interfaces:
+    - 0.4,1.8
+    - 0.5,1.9
+    - 0.6,1.10
+    - 0.7,1.11
+    - 0.8,3.4
+    - 0.9,3.5
+    - 0.10,3.6
+    - 0.11,3.7
+    - 0.12,2.12
+    - 0.13,2.13
+    - 0.14,2.14
+    - 0.15,2.15
+    - 1.4,2.8
+    - 1.5,2.9
+    - 1.6,2.10
+    - 1.7,2.11
+    - 1.12,3.12
+    - 1.13,3.13
+    - 1.14,3.14
+    - 1.15,3.15
+    - 2.4,3.8
+    - 2.5,3.9
+    - 2.6,3.10
+    - 2.7,3.11
+```
+
+## questions
+
+
+## references
+* https://www.ansibletutorials.com/installing-redis  
+* https://docs.ansible.com/ansible/latest/user_guide/playbooks_reuse_roles.html  
+* 
