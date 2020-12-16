@@ -1,4 +1,22 @@
 # testbed v2 design
+* goal: support running multiple DUTs testbed with inter-DUT connection(Spytest).
+* features:
+    * support dynamically vlan assignment upon `add_topo`.
+    * support link state propagation for inter-DUTs connections.
+* components:
+    * test users
+    * a Redis db
+    * server daemon
+        * running on the same server of the database.
+        * responsible for the db provisioning and interaction with test users.
+    * labcfgd daemon
+        * running over root/leaf fanout switchs
+        * subscribe to key changes of the database and act accordingly.
+* design:
+    * a core `Redis` database hosting all connections' metadata.
+    * based on the pub/sub architecture, once test user modifies certain keys in db, `labcfgd` will respond to key changes and modify connection/port state.
+        * dynamic vlan modification to database will cause `labcfgd` assign the vlan to the corresponding port.
+        * virtual link status change to database will cause `labcfgd` to open/shutdown the physical port connecting to DUT.
 
 ## connection db schema
 * requirements:
