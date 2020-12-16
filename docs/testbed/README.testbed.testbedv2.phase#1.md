@@ -6,16 +6,16 @@
 * components:
     * test users
     * a Redis db
-    * server daemon
+    * servercfgd
         * running on the same server of the database.
         * responsible for the db provisioning and interaction with test users.
-    * labcfgd daemon
+    * labcfgd
         * running over root/leaf fanout switchs
         * subscribe to key changes of the database and act accordingly.
-* design:
+* design principle:
     * a core `Redis` database hosting all connections' metadata.
     * based on the pub/sub architecture, once test user modifies certain keys in db, `labcfgd` will respond to key changes and modify connection/port state.
-        * dynamic vlan modification to database will cause `labcfgd` assign the vlan to the corresponding port.
+        * dynamic vlan modification to database will cause `labcfgd` assign the vlan to the corresponding port on fanout.
         * virtual link status change to database will cause `labcfgd` to open/shutdown the physical port connecting to DUT.
 * stages:
     * phase#1: initial db setup and provision.
@@ -27,26 +27,16 @@
   * dataset in file:
     * `sonic_<lab_name>_devices.csv`
     * `sonic_<lab_name>_links.csv`
-  * operations:
-    * current `conn_graph_facts` ops:
-      * get host device info
-      * get host connection info
-      * get assigned vlans info
-        * vlan ids
-        * vlan ids list
-        * peer port mode
-        * peer vlan ids
-        * peer vlan ids list
 * connection db schema:
   * `LAB_CONNECTION_GRAPH_VERSIONS`:
-    * zset of md5sum values of connection graph files
-      * scores are the timestamps of md5sum values to ensure they are chronological
+    * zset of md5sum values of connection graph files used to provision the database
+      * scores are the timestamps when md5sum values are added, to ensure they are chronological
       * with the last one in zset are the current-in-use connection graph md5sum value and its added timestamp
     * users that wish to provision the db will check to see if the md5sum value of connection graph file is in `LAB_CONNECTION_GRAPH_VERSIONS`
       * if `yes`, stop provision
         * prevent users with dated connection graph file try to provision the db.
       * if `no`, try to provision and add the md5sum value to `LAB_CONNECTION_GRAPH_VERSIONS` with current time as score.
-    * server daemon will trim `LAB_CONNECTION_GRAPH_VERSIONS` to keep most-recent 100 md5sum values.
+        * it will also trim `LAB_CONNECTION_GRAPH_VERSIONS` to keep most-recent 20 md5sum values.
   * `LAB_META`
     * `ServerState`:
       * `active`
@@ -68,7 +58,6 @@
   * `SERVER_TABLE:server_name`
     * `HwSku`
     * `ManagementIp`
-
   * `PORT_LIST:<switch_name|dut_name|server_name>`
     * set storing all the ports of a device
   * `PORT_TABLE:switch_name:port_name`
@@ -90,13 +79,16 @@
 ## phase one
 * in phase one, we only cover the connection db setup and provision.
 * Ansible variables added:
-  * `enable_connection_db`: enable setup and provision connection db
-  * `connection_db_host`: specifies which server to use
-  * `connection_db_mapping`: we store the data from different connection graph files in different db.
-    * like `{'str': 0, 'str2': 1}`
-  * `enfornce_provision_server_daemon`: enforce install server daemon even there is one running.
-  * `disable_connection_db`
+  * `add_topo`:
+    * `enable_connection_db`: enable setup and provision connection db
+    * `connection_db_host`: specifies which server to host connection db and `servercfgd`
+    * `connection_db_mapping`: we store the data from different connection graph files in different databases.
+      * like `{'str': 0, 'str2': 1}`
+    * `enfornce_provision_server_daemon`: enforce install server daemon even there is one running.
+  * `remove_topo`:
+    * `disable_connection_db`:
 * db config:
+  * enable snapshot
   * enable `AOF`
   * binds to `0.0.0.0`
   * disable authentication
@@ -109,10 +101,10 @@
       * if Redis is newly-installed
         * initialize each db based on `connection_db_mapping`
         * init `server_state` to `down`
-    * ensure server daemon is running.
+    * ensure servercfgd is running.
       * if `enforce_provision_server_daemon` is `True`, enforce re-deploy server daemon
   * called in `remove_topo` with `action: stop_db` if `disable_connection_db` is `True`
-    * ensure server daemon is stopped
+    * ensure servercfgd is stopped
     * ensure Redis and py-redis is removed 
 
 
@@ -126,6 +118,8 @@
      * if wait timeout, raises an error to abort `add_topo`
   2. check md5sum is in `LAB_CONNECTION_GRAPH_VERSIONS`
      * if `yes`, releas lock and returns.
+     * if `no`, add md5sum value to `LAB_CONNECTION_GRAPH_VERSION` with current timestamp as score.
+       * trim `LAB_CONNECTION_GRAPH_VERSION` to ensure most-recent 20 entries
   3. change `server_state` to `provisioning`
   4. remove all keys in db
   5. add_device
@@ -134,10 +128,18 @@
   8. release lock and returns
 
 ### connection_graph_facts
-* add extra parameters `conn_graph_facts_src`, could be either `from_db` or `from_file`
+* add an extra parameters `conn_graph_facts_src`, could be either `from_db` or `from_file`
   * if `from_db`, retrieve those data from connection db
     * should ensure `server_state` is active
-  * if `from_file`, fall back to the orignal function
+  * if `from_file`, fall back to parse connection graph file.
+
+### some extreme scenarios
+1. what if there is power outage for server?
+  * Redis is configured with both snapshot and AOF persistence
+  * might have db cluster in the future
+2. what if the user forcely stops db provision in `add_topo`(`Ctr + C`), will this leave db in inconsistent state?
+  * no, since servercfgd is a rpc server, even the client stops, the call to provision the db will finish eventually.
+  * so be careful in provisioning the db, maybe tryout with `conn_graph_facts_src=from_file` first to test out connection changes.
 
 ## phase 2
 ### topology description
