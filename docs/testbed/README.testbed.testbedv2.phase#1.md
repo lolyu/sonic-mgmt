@@ -17,6 +17,10 @@
     * based on the pub/sub architecture, once test user modifies certain keys in db, `labcfgd` will respond to key changes and modify connection/port state.
         * dynamic vlan modification to database will cause `labcfgd` assign the vlan to the corresponding port.
         * virtual link status change to database will cause `labcfgd` to open/shutdown the physical port connecting to DUT.
+* stages:
+    * phase#1: initial db setup and provision.
+    * phase#2: dynamic vlan assignment support.
+    * phase#3: link state propagation support.
 
 ## connection db schema
 * requirements:
