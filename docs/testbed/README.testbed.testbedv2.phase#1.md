@@ -81,10 +81,10 @@
     * `vlan_type`
       * `access`
       * `trunk`
-    * `vlan_ids`
-      * string of assigned vlan ids
     * `phypeer_port`
       * physical peer port, FK to `PORT_TABLE`
+  * `VLAN_LIST:switch_name:port_name`:
+    * set contains all vlan ids assigned to port.
   * `VLANIDPOOL_SET`:
     * set of unique available vlan ids
   * `VIRTLINKS_TABLE:endport0:endport1`: `endport` is FK to `PORT_TABLE`
