@@ -48,47 +48,42 @@
       * if `no`, try to provision and add the md5sum value to `LAB_CONNECTION_GRAPH_VERSIONS` with current time as score.
     * server daemon will trim `LAB_CONNECTION_GRAPH_VERSIONS` to keep most-recent 100 md5sum values.
   * `LAB_META`
-    * `server_state`:
+    * `ServerState`:
       * `active`
       * `provisioning`
       * `down`
   * `SWITCH_TABLE:switch_name`
     * `HwSku`
     * `ManagementIp`
-    * `mgmtip`
-    * `ManagementGw`
-    * `type`
+    * `Type`
       * `leaf_fanout`
       * `root_fanout`
   * `DUT_TABLE:dut_name`
     * `HwSku`
     * `ManagementIp`
-    * `mgmtip`
-    * `ManagementGw`
-    * `provision_status`
+    * `ProvisionStatus`
       * `not provisioned`
       * `in progress`
       * `provisioned/unique id`
   * `SERVER_TABLE:server_name`
     * `HwSku`
     * `ManagementIp`
-    * `mgmtip`
-    * `ManagementGw`
+
   * `PORT_LIST:<switch_name|dut_name|server_name>`
     * set storing all the ports of a device
   * `PORT_TABLE:switch_name:port_name`
-    * `bandwidth`
-    * `vlan_type`
+    * `BandWidth`
+    * `VlanType`
       * `access`
       * `trunk`
-    * `phypeer_port`
+    * `PhyPeerPort`
       * physical peer port, FK to `PORT_TABLE`
   * `VLAN_LIST:switch_name:port_name`:
     * set contains all vlan ids assigned to port.
   * `VLANIDPOOL_SET`:
     * set of unique available vlan ids
   * `VIRTLINKS_TABLE:endport0:endport1`: `endport` is FK to `PORT_TABLE`
-    * `status`
+    * `Status`
       * `active`
       * `inactive`
 
