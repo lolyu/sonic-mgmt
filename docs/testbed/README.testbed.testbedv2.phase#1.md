@@ -37,6 +37,7 @@
         * prevent users with dated connection graph file try to provision the db.
       * if `no`, try to provision and add the md5sum value to `LAB_CONNECTION_GRAPH_VERSIONS` with current time as score.
         * it will also trim `LAB_CONNECTION_GRAPH_VERSIONS` to keep most-recent 20 md5sum values.
+    *
   * `LAB_META`
     * `ServerState`:
       * `active`
@@ -50,6 +51,8 @@
       * `root_fanout`
   * `DUT_TABLE:dut_name`
     * `HwSku`
+    * `Topo`
+    * `SonicHwSku`
     * `ManagementIp`
     * `ProvisionStatus`
       * `not provisioned`
@@ -58,6 +61,7 @@
   * `SERVER_TABLE:server_name`
     * `HwSku`
     * `ManagementIp`
+      * `ServerStatus`
   * `PORT_LIST:<switch_name|dut_name|server_name>`
     * set storing all the ports of a device
   * `PORT_TABLE:switch_name:port_name`
@@ -140,6 +144,7 @@
 2. what if the user forcely stops db provision in `add_topo`(`Ctr + C`), will this leave db in inconsistent state?
   * no, since servercfgd is a rpc server, even the client stops, the call to provision the db will finish eventually.
   * so be careful in provisioning the db, maybe tryout with `conn_graph_facts_src=from_file` first to test out connection changes.
+3. ensure db failure
 
 ## phase 2
 ### topology description
