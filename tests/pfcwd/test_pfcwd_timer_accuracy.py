@@ -223,7 +223,11 @@ class TestPfcwdAllTimer(object):
         try:
             for i in xrange(1, 20):
                 logger.info("--- Pfcwd Timer Test iteration #{}".format(i))
-                self.run_test()
+                duthost.shell("nohup redis-cli -n 2 monitor | grep -E 'COUNTERS:oid:0x100000000000d|COUNTERS:oid:0x15000000000265' > monitor.log &")
+                try:
+                    self.run_test()
+                finally:
+                    duthost.shell("kill -s 2 $(pidof redis-cli)")
             self.verify_pfcwd_timers()
 
         except Exception as e:

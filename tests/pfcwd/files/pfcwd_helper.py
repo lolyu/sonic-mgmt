@@ -244,6 +244,7 @@ def select_test_ports(test_ports):
         random_port = test_ports.keys()[0]
         selected_ports[random_port] = test_ports[random_port]
 
+    return {'Ethernet28': test_ports['Ethernet28']}
     return selected_ports
 
 
