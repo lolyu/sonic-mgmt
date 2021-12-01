@@ -5,6 +5,7 @@ import select
 import json
 import argparse
 import os.path
+import ipaddress
 from collections import defaultdict
 from fcntl import ioctl
 from pprint import pprint
@@ -15,10 +16,13 @@ import scapy.all as scapy2
 scapy2.conf.use_pcap=True
 import scapy.arch.pcapdnet
 
+
 NEIGH_SOLICIT_ICMP_MSG_TYPE = 135
+
 
 def hexdump(data):
     print " ".join("%02x" % ord(d) for d in data)
+
 
 def get_if(iff, cmd):
     s = socket.socket()
@@ -26,6 +30,7 @@ def get_if(iff, cmd):
     s.close()
 
     return ifreq
+
 
 def get_mac(iff):
     SIOCGIFHWADDR = 0x8927          # Get hardware address
@@ -187,13 +192,26 @@ class ARPResponder(object):
 
         return neigh_adv_pkt
 
+
+def is_ipv6_address(addr):
+    return ipaddress.ip_address(addr.decode()).version == 6
+
+
+def ipv6_snmc(ipv6_addr):
+    """Return link-local solicited-node multicast address for given ipv6 address."""
+    addr_bytes = scapy2.in6_getnsma(scapy2.inet_pton(scapy2.socket.AF_INET6, ipv6_addr))
+    return scapy2.inet_ntop(scapy2.socket.AF_INET6, addr_bytes)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='ARP autoresponder')
     parser.add_argument('--conf', '-c', type=str, dest='conf', default='/tmp/from_t1.json', help='path to json file with configuration')
     parser.add_argument('--extended', '-e', action='store_true', dest='extended', default=False, help='enable extended mode')
+    parser.add_argument('--accept-snmc', action='store_true', dest='snmc', default=False, help='accept NDP packet with solicited-node multicast address')
     args = parser.parse_args()
 
     return args
+
 
 def main():
     args = parse_args()
@@ -218,11 +236,19 @@ def main():
             ip_sets[str(iface)] = defaultdict(list)
         if args.extended:
             for ip, mac in ip_dict.items():
-                ip_sets[str(iface)][str(ip)] = binascii.unhexlify(str(mac))
+                ip = str(ip)
+                mac_bytes = binascii.unhexlify(str(mac))
+                if args.snmc and is_ipv6_address(ip):
+                    ip_sets[str(iface)][ipv6_snmc(ip)] = mac_bytes
+                ip_sets[str(iface)][ip] = mac_bytes
                 counter += 1
         else:
             for ip in ip_dict:
-                ip_sets[str(iface)][str(ip)] = get_mac(str(iface))
+                ip = str(ip)
+                mac = get_mac(str(iface))
+                if args.snmc and is_ipv6_address(ip):
+                    ip_sets[str(iface)][ipv6_snmc(ip)] = mac
+                ip_sets[str(iface)][ip] = mac
         if vlan is not None:
             ip_sets[str(iface)]['vlan'].append(binascii.unhexlify(vlan_tag))
 
