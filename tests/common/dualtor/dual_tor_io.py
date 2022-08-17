@@ -83,6 +83,7 @@ class DualTorIO:
 
         self.ptf_intf_to_server_ip_map = self._generate_vlan_servers()
         self.__configure_arp_responder()
+        self._probe_stale_servers()
 
         logger.info("VLAN interfaces: {}".format(str(self.vlan_interfaces)))
         logger.info("PORTCHANNEL interfaces: {}".format(str(self.tor_pc_intfs)))
@@ -152,6 +153,33 @@ class DualTorIO:
         self.ptfhost.shell("supervisorctl reread && supervisorctl update")
         self.ptfhost.shell("supervisorctl restart arp_responder")
         logger.info("arp_responder restarted")
+
+    def _probe_stale_servers(self):
+        """Trigger probe for the servers' neighbors that are in STALE state."""
+        neighbors = {}
+        ip_neighbors_output = self.duthost.shell("ip neighbor show")["stdout_lines"]
+        for line in ip_neighbors_output:
+            words = line.strip().split()
+            if not words:
+                continue
+            neighbor_details = {}
+            neighbors[words[0]] = words[-1]
+            try:
+                neighbor_details["dev"] = words[words.index("dev") + 1]
+                neighbor_details["state"] = words[-1]
+            except (ValueError, IndexError):
+                continue
+            neighbors[words[0]] = neighbor_details
+
+        commands = []
+        for servers in self.ptf_intf_to_server_ip_map.values():
+            for server in servers:
+                if server in neighbors and neighbors[server]["state"] == "STALE":
+                    # put neighbors in `STALE` state into `DELAY` state to trigger next neighbor entry validation
+                    # as `arp_responder` is running, those validation should be able to put those `STALE` neighbors
+                    # into `REACHABLE` state
+                    commands.append("ip neighbor replace %s dev %s nud delay" % (server, neighbors[server]["dev"]))
+        self.duthost.shell_cmds(cmds=commands)
 
     def start_io_test(self, traffic_generator=None):
         """
