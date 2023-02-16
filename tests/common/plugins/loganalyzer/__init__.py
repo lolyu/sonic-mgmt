@@ -4,6 +4,7 @@ import pytest
 from .loganalyzer import LogAnalyzer, DisableLogrotateCronContext
 from tests.common.errors import RunAnsibleModuleFail
 from tests.common.helpers.parallel import parallel_run, reset_ansible_local_tmp
+from tests.common.helpers.parallel import parallel_run_threaded
 
 
 def pytest_addoption(parser):
@@ -48,12 +49,19 @@ def loganalyzer(duthosts, request):
 
     # Analyze all the duts
     analyzers = {}
-    parallel_run(analyzer_logrotate, [], {}, duthosts, timeout=120)
+    parallel_run_threaded(
+        tuple(lambda: analyzer_logrotate(duthost) for duthost in duthosts),
+        timeout=120, thread_count=len(duthosts)
+    )
     for duthost in duthosts:
         analyzer = LogAnalyzer(ansible_host=duthost, marker_prefix=request.node.name)
         analyzer.load_common_config()
         analyzers[duthost.hostname] = analyzer
-    markers = parallel_run(analyzer_add_marker, [analyzers], {}, duthosts, timeout=120)
+    markers = parallel_run_threaded(
+        tuple(lambda: analyzer_add_marker(analyzers, node=duthost, results={}) for duthost in duthosts),
+        timeout=120, thread_count=len(duthosts)
+    )
+    markers = {duthost.hostname: marker for duthost, marker in zip(duthosts, markers)}
 
     yield analyzers
 
