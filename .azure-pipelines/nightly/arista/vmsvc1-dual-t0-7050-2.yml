@@ -4,11 +4,11 @@ trigger: none
 pr: none
 
 schedules:
-  - cron: "00 4 * * 0,2,4"
+  - cron: "00 4 * * 2"
     displayName: Nightly Scheduler
     branches:
       include:
-      - internal-202205
+      - internal-202311
     always: true
 
 variables:
@@ -24,7 +24,7 @@ parameters:
   # Upgrade parameters
   - name: IMAGE_URL
     type: string
-    default: $(IMAGE_BRCM_ABOOT_202205)
+    default: $(IMAGE_BRCM_ABOOT_202311)
     displayName: "Image URL"
 
   # Deploy parameters
@@ -35,11 +35,11 @@ parameters:
   # Test Parameters
   - name: PY_SAITHRIFT_URL
     type: string
-    default: $(SAITHRIFT_BRCM_202205)
+    default: $(SAITHRIFT_BRCM_202311)
     displayName: "py_saithrift URL"
 
-  # skip warmboot specific cases on 202205 dualtor
-  # this should be removed once dualtor warmboot is ready on 202205
+  # skip warmboot specific cases on 202311 dualtor
+  # this should be removed once dualtor warmboot is ready on 202311
   - name: SKIP_SCRIPTS
     type: string
     default: "arp/test_wr_arp.py \
