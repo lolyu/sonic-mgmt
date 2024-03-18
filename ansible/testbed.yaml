@@ -420,6 +420,21 @@
   auto_recover: 'True'
   comment: vadixit
 
+- conf-name: vms20-rdma-t0-8111
+  group-name: vms20-ixia-9
+  topo: tgen-t0-3-32
+  ptf_image_name: docker-keysight-api-server
+  ptf: vms20-ixia-9
+  ptf_ip: 10.64.246.150/23
+  ptf_ipv6:
+  server: server_20
+  vm_base:
+  dut:
+    - STR-8111-C14-U18
+  inv_name: ixia
+  auto_recover: 'False'
+  comment: devojha
+
 - conf-name: vms20-rdma-t1-8102
   group-name: vms20-ixia-10
   topo: tgen-t1-64-4
@@ -1416,22 +1431,6 @@
   inv_name: bjw
   auto_recover: 'True'
   comment: Beijing lab
-
-- conf-name: testbed-bjw-can-ec9516-1
-  group-name: bjw16-1
-  topo: t1-lag
-  ptf_image_name: docker-ptf
-  ptf: bjw16-1
-  ptf_ip: 10.150.23.51/23
-  ptf_ipv6:
-  ptf_extra_mgmt_ip: ["172.16.188.51/17"]
-  server: server_bjw_16
-  vm_base: VM73000
-  dut:
-    - bjw-can-ec9516-1
-  inv_name: bjw
-  auto_recover: 'True'
-  comment: SAI Qualification
 
 - conf-name: testbed-bjw-can-2700-1
   group-name: bjw13-1
