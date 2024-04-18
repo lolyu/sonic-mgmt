@@ -1072,6 +1072,18 @@ platform_tests/test_service_warm_restart.py:
     conditions:
       - "asic_type not in ['mellanox'] or release in ['202205', '202305', 'internal']"
 
+platform_tests/test_reboot.py::test_fast_reboot:
+  skip:
+    reason: "Fast reboot is broken on dualtor topology. Skipping for now."
+    conditions:
+      - "'dualtor' in topo_name and https://github.com/sonic-net/sonic-buildimage/issues/16502"
+
+platform_tests/test_reboot.py::test_warm_reboot:
+  skip:
+    reason: "Warm reboot is broken on dualtor topology. Skipping for now."
+    conditions:
+      - "'dualtor' in topo_name and https://github.com/sonic-net/sonic-buildimage/issues/16502"
+
 #######################################
 #####           qos               #####
 #######################################
