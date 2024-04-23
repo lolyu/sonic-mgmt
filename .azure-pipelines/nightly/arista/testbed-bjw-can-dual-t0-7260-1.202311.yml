@@ -24,7 +24,7 @@ parameters:
   # Upgrade parameters
   - name: IMAGE_URL
     type: string
-    default: $(IMAGE_BRCM_ABOOT_202311)
+    default: $(BJW_IMAGE_BRCM_ABOOT_202311)
     displayName: "Image URL"
 
   # Deploy parameters
@@ -35,7 +35,7 @@ parameters:
   # Test Parameters
   - name: PY_SAITHRIFT_URL
     type: string
-    default: $(SAITHRIFT_BRCM_202311)
+    default: $(BJW_SAITHRIFT_BRCM_202311)
     displayName: "py_saithrift URL"
 
   - name: TESTBED_SPECIFIC
