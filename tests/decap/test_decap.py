@@ -33,7 +33,6 @@ from tests.common.dualtor.dual_tor_common import mux_config                     
 from tests.common.dualtor.mux_simulator_control import toggle_all_simulator_ports_to_random_side    # noqa F401
 from tests.common.dualtor.nic_simulator_control import mux_status_from_nic_simulator                # noqa F401
 from tests.common.dualtor.dual_tor_utils import is_tunnel_qos_remap_enabled
-from tests.common.config_reload import config_reload
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +41,6 @@ PTFRUNNER_QLEN = 1000
 pytestmark = [
     pytest.mark.topology('any')
 ]
-
-
-# Add a fixture to reload the DUT at the beginning of the test as a workaround for the flaky failure
-# If the test is still flaky after this workaround, then it's probably an image issue which needs
-# further investigation.
-@pytest.fixture(scope='module', autouse=True)
-def reload_dut_config(duthosts):
-    for duthost in duthosts:
-        logger.info('Reloading config on {}'.format(duthost.hostname))
-        config_reload(duthost, wait_for_bgp=True)
 
 
 def remove_default_decap_cfg(duthosts):
