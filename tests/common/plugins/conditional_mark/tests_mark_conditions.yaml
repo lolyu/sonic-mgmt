@@ -1240,6 +1240,10 @@ qos/test_qos_sai.py::TestQosSai::testQosSaiDwrrWeightChange:
     reason: "Skip DWRR weight change test on Mellanox platform."
     conditions:
       - "asic_type in ['mellanox']"
+  xfail:
+    reason: "Testbed fanout issue"
+    conditions:
+      - "'t1' in topo_name and hwsku in ['Cisco-8101-O8C48', 'Cisco-8111-O32']"
 
 qos/test_qos_sai.py::TestQosSai::testQosSaiHeadroomPoolSize:
   skip:
