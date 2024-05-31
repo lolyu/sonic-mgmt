@@ -1235,6 +1235,12 @@ qos/test_qos_sai.py::TestQosSai::testQosSaiDscpToPgMapping:
     conditions:
       - "'backend' in topo_name"
 
+qos/test_qos_sai.py::TestQosSai::testQosSaiDwrr:
+  xfail:
+    reason: "Testbed fanout issue"
+    conditions:
+      - "'t1' in topo_name and '8111' in hwsku"
+
 qos/test_qos_sai.py::TestQosSai::testQosSaiDwrrWeightChange:
   skip:
     reason: "Skip DWRR weight change test on Mellanox platform."
