@@ -45,12 +45,6 @@ arp/test_arp_dualtor.py::test_proxy_arp_for_standby_neighbor:
     conditions:
       - "release not in ['202012']"
 
-arp/test_stress_arp.py:
-  skip:
-    resason: "Extremely long long run time."
-    conditions:
-      - https://github.com/sonic-net/sonic-mgmt/issues/7874
-
 arp/test_unknown_mac.py:
   skip:
     reason: "Behavior on cisco-8000 platform for unknown MAC is flooding rather than DROP, hence skipping."
@@ -1405,9 +1399,8 @@ snmp/test_snmp_link_local.py:
   skip:
     reason: "SNMP over IPv6 support not present in release branches."
     conditions:
-      - https://github.com/sonic-net/sonic-buildimage/issues/6108
       - "is_multi_asic==False"
-      - "release in ['202205', '202211', '202305']"
+      - "release in ['202205', '202211', '202305', '202311']"
 
 snmp/test_snmp_loopback.py::test_snmp_loopback:
   skip:
