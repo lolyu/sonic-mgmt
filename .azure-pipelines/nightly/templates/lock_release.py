@@ -5,9 +5,19 @@ import requests
 import sys
 
 DEFAULT_LOCK_HOURS = 36
+ENDPOINT_TESTBED = "https://sonic-elastictest-prod-management-webapp.azurewebsites.net/api/v1/testbed"
+ENDPOINT_TESTBEDS = "https://sonic-elastictest-prod-management-webapp.azurewebsites.net/api/v1/testbeds"
 
 
 def get_token():
+
+    access_token = os.environ.get('ACCESS_TOKEN', None)
+    if access_token:
+        print("Got ACCESS_TOKEN from environment variable.")
+        return access_token
+
+    print("No ACCESS_TOKEN in environment variable, try to get token using client secrets.")
+
     token_url = 'https://login.microsoftonline.com/{}/oauth2/v2.0/token'.format(
         os.environ.get('ELASTICTEST_MSAL_TENANT'))
     headers = {
@@ -28,13 +38,16 @@ def get_token():
     return None
 
 
-def get_testbed(testbed_name):
+def get_testbed(testbed_name, endpoint_testbeds):
     """
     Get testbed info by search testbed name.
     """
     try:
         # Use the same API as testbed mgmt page
-        url = '{}/query_by_keyword?keyword={}&testbed_type=PHYSICAL&page=1&page_size=1'.format(os.environ.get("ELASTICTEST_MGMT_TESTBEDS_URL"), testbed_name)
+        url = '{}/query_by_keyword?keyword={}&testbed_type=PHYSICAL&page=1&page_size=1'.format(
+            endpoint_testbeds,
+            testbed_name
+        )
         headers = {
             'Authorization': 'Bearer {}'.format(get_token())
         }
@@ -54,7 +67,7 @@ def get_testbed(testbed_name):
         return {}
 
 
-def lock_release(testbed, action, hours, user, reason, force, absolute):
+def lock_release(testbed, action, hours, user, reason, force, absolute, ignore_status, endpoint_testbed):
     """
     Lock or release a testbed.
 
@@ -81,7 +94,7 @@ def lock_release(testbed, action, hours, user, reason, force, absolute):
             'lock_reason': reason,
             'absolute_lock': absolute,
             'force_lock': force,
-            'ignore_status': True,
+            'ignore_status': ignore_status,
         }
         if action == 'release':
             data = {
@@ -93,9 +106,11 @@ def lock_release(testbed, action, hours, user, reason, force, absolute):
         headers = {
             'Authorization': 'Bearer {}'.format(get_token())
         }
-        resp = requests.post("{}/{}".format(os.environ.get("ELASTICTEST_MGMT_TESTBED_URL"), action),
-                             json=data,
-                             headers=headers).json()
+        resp = requests.post(
+            "{}/{}".format(endpoint_testbed, action),
+            json=data,
+            headers=headers
+        ).json()
 
         if 'failed' in resp and resp['failed']:
             print('[Elastictest] {} {} testbed {} failed'.format(user, action, testbed))
@@ -171,11 +186,32 @@ if __name__ == '__main__':
         default="yes",
         help='Absolute lock. Valid values: true, yes, t, y, false, no, f, n. Case insensitive')
 
+    parser.add_argument('-i', '--ignore-status',
+        type=str,
+        dest='ignore_status',
+        required=False,
+        default='true',
+        help='Ignore status. Valid values: True, False. Case insensitive. Default is True.')
+
     parser.add_argument('-R',
         action='store_true',
         dest='brutal_release',
         required=False,
         help='Brutal force release flag.')
+
+    parser.add_argument('--endpoint-testbed',
+        type=str,
+        dest='endpoint_testbed',
+        required=False,
+        default=ENDPOINT_TESTBED,
+        help='Endpoint for the testbed API')
+
+    parser.add_argument('--endpoint-testbeds',
+        type=str,
+        dest='endpoint_testbeds',
+        required=False,
+        default=ENDPOINT_TESTBEDS,
+        help='Endpoint for the testbeds API')
 
     args = parser.parse_args()
 
@@ -193,10 +229,23 @@ if __name__ == '__main__':
     print('Args for lock_release: ' + str(args))
     force_lock = args.force.lower() in ['true', 'yes', 't', 'y']
     absolute_lock = args.absolute.lower() in ['true', 'yes', 't', 'y']
+    ignore_status = args.ignore_status.lower() in ['true', 'yes', 't', 'y']
     if not args.brutal_release:
-        sys.exit(lock_release(args.testbed, args.action, args.hours, args.user, args.reason, force_lock, absolute_lock))
+        sys.exit(
+            lock_release(
+                args.testbed,
+                args.action,
+                args.hours,
+                args.user,
+                args.reason,
+                force_lock,
+                absolute_lock,
+                ignore_status,
+                args.endpoint_testbed,
+            )
+        )
     else:
-        testbed_res = get_testbed(args.testbed)
+        testbed_res = get_testbed(args.testbed, args.endpoint_testbeds)
 
         if not testbed_res:
             print('Failed to get testbed details')
@@ -207,4 +256,16 @@ if __name__ == '__main__':
             print('Testbed "{}" is not locked by anyone'.format(args.testbed))
             sys.exit(0)
 
-        sys.exit(lock_release(args.testbed, 'release', args.hours, locked_by, args.reason, force_lock, absolute_lock))
+        sys.exit(
+            lock_release(
+                args.testbed,
+                'release',
+                args.hours,
+                locked_by,
+                args.reason,
+                force_lock,
+                absolute_lock,
+                ignore_status,
+                args.endpoint_testbed
+            )
+        )

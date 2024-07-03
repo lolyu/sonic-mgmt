@@ -1,17 +1,18 @@
-name: SAI_202012_RELEASE_TEST_$(Build.DefinitionName)_$(SourceBranchName)_$(Build.BuildId)_$(Date:yyyyMMdd)$(Rev:.r)
+name: $(Build.DefinitionName)_$(SourceBranchName)_$(Build.BuildId)_$(Date:yyyyMMdd)$(Rev:.r)
 trigger: none
 pr: none
 
 resources:
  pipelines:
    - pipeline: SAIBuildPipeline
-     source: Build.SAI.BRCM.4.3
-     project: internal
+     source: bcm_sai_external_sug
+     project: broadcom
      trigger:
         enabled: true
         branches:
           include:
-          - REL_4.3_202012
+          - SAI_10.1.0_GA
+
 
 variables:
   - template: templates/template_variables.yml
@@ -22,17 +23,21 @@ parameters:
   - name: TESTBED_NAME
     type: string
     displayName: "Testbed Name"
-    default: vms20-t0-7050cx3-1
+    default: vms20-t0-7050cx3-2
 
   - name: IMAGE_URL
     type: string
-    default: $(IMAGE_BRCM_ABOOT_202012)
+    default: $(IMAGE_BRCM_ABOOT_202311)
     displayName: "Image URL"
 
   - name: PY_SAITHRIFT_URL
     type: string
-    default: $(SAITHRIFT_BRCM_202012)
+    default: $(SAITHRIFT_BRCM_202311)
     displayName: "py_saithrift URL"
+
+  - name: MGMT_BRANCH
+    type: string
+    default: internal-202311
 
   # Testbed specific, to skip and/or include directories or just run basic tests
   - name: TESTBED_SPECIFIC
@@ -52,27 +57,31 @@ parameters:
 
   - name: ARTIFACT_PROJECT
     type: string
-    default: internal
+    default: broadcom
+    values:
+      - broadcom
+      - internal
 
   - name: SDK_BUILD_PIPELINE_NAME
     type: string
-    default: "Build.SAI.BRCM.4.3"
+    default: "bcm_sai_external_sug"
+    values:
+      - "bcm_sai_external_sug"
+      - "Build.SAI.BRCM.7.0"
 
   - name: SDK_ARTIFACT_NAME
     displayName: "artifact name"
     type: string
-    default: "saibcm.4_3"
+    default: xgs
+    values:
+      - xgs
+      - saibcm.7.0
 
   # Test report
   - name: UPLOAD_TEST_REPORT
     displayName: "Upload Test Report"
     type: boolean
     default: false
-
-  # - name: PIPELINE_BRANCH
-  #   displayName: "pipeline running branch(all the buildouts binding to a branch)"
-  #   default: "internal"
-  #   type: string
 
   # Resource agent pool
   - name: AGENT_POOL
@@ -91,6 +100,7 @@ jobs:
       TESTBED_NAME: ${{ parameters.TESTBED_NAME }}
       IMAGE_URL: ${{ parameters.IMAGE_URL }}
       PY_SAITHRIFT_URL: ${{ parameters.PY_SAITHRIFT_URL }}
+      MGMT_BRANCH: ${{ parameters.MGMT_BRANCH }}
       UPLOAD_TEST_REPORT: ${{ parameters.UPLOAD_TEST_REPORT }}
       DEPLOY_SAI_SDK: ${{ parameters.DEPLOY_SAI_SDK }}
       SDK_BUILD_PIPELINE_NAME: ${{ parameters.SDK_BUILD_PIPELINE_NAME }}
