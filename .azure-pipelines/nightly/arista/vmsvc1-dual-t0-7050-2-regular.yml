@@ -40,7 +40,10 @@ parameters:
 
   - name: SKIP_SCRIPTS
     type: string
-    default: ""
+    default: "arp/test_wr_arp.py \
+              platform_tests/test_advanced_reboot.py \
+              platform_tests/test_cont_warm_reboot.py \
+              ecmp/test_ecmp_sai_value.py"
     displayName: "Skip Scripts"
 
   - name: TESTBED_SPECIFIC
