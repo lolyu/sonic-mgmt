@@ -62,17 +62,14 @@ def pause_arp_update(duthosts):
 
 
 @pytest.fixture(params=['IPv4', 'IPv6'])
-def neighbor_ip(request, mux_config):       # noqa F811
-    """
-    Provide the neighbor IP used for testing
-
-    Randomly select an IP from the server IPs configured in the config DB MUX_CABLE table
-    """
+def selected_mux_port(request, mux_config):       # noqa: F811
+    """Randomly select a mux port for testing."""
     ip_version = request.param
     selected_intf = random.choice(list(mux_config.values()))
     neigh_ip = ip_interface(selected_intf["SERVER"][ip_version]).ip
+    cable_type = selected_intf["SERVER"].get("cable_type", "active-standby")
     logger.info("Using {} as neighbor IP".format(neigh_ip))
-    return neigh_ip
+    return selected_intf, neigh_ip, cable_type
 
 
 @pytest.fixture
@@ -134,8 +131,8 @@ def test_proxy_arp_for_standby_neighbor(proxy_arp_enabled, ip_and_intf_info, res
 
 
 def test_arp_update_for_failed_standby_neighbor(
-    config_dualtor_arp_responder, neighbor_ip, clear_neighbor_table,            # noqa F811
-    toggle_all_simulator_ports_to_upper_tor, upper_tor_host, lower_tor_host     # noqa F811
+    config_dualtor_arp_responder, selected_mux_port, clear_neighbor_table,                      # noqa: F811
+    toggle_all_simulator_ports_to_rand_selected_tor, rand_selected_dut, rand_unselected_dut     # noqa: F811
 ):
     """
     Test the standby ToR's ability to recover from having a failed neighbor entry
@@ -148,7 +145,12 @@ def test_arp_update_for_failed_standby_neighbor(
     4. Run `arp_update` on the active ToR
     5. Verify the incomplete entry is now reachable
     """
-    if ip_address(neighbor_ip).version == 6 and lower_tor_host.facts["asic_type"] == "vs":
+    _, neighbor_ip, cable_type = selected_mux_port
+
+    if cable_type == "active-active":
+        pytest.skip("Skip as the testcase is designed for active-standby mux port.")
+
+    if ip_address(neighbor_ip).version == 6 and rand_unselected_dut.facts["asic_type"] == "vs":
         pytest.skip("Temporarily skipped to let the sonic-swss submodule be updated.")
     # We only use ping to trigger an ARP request from the kernel, so exit early to save time
     ping_cmd = "timeout 0.2 ping -c1 -W1 -i0.2 -n -q {}".format(neighbor_ip)
@@ -180,8 +182,8 @@ def test_arp_update_for_failed_standby_neighbor(
 
 
 def test_standby_unsolicited_neigh_learning(
-    config_dualtor_arp_responder, neighbor_ip, clear_neighbor_table,            # noqa F811
-    toggle_all_simulator_ports_to_upper_tor, upper_tor_host, lower_tor_host     # noqa F811
+    config_dualtor_arp_responder, selected_mux_port, clear_neighbor_table,                      # noqa: F811
+    toggle_all_simulator_ports_to_rand_selected_tor, rand_selected_dut, rand_unselected_dut     # noqa: F811
 ):
     """
     Test the standby ToR's ability to perform unsolicited neighbor learning (GARP and unsolicited NA)
@@ -191,7 +193,8 @@ def test_standby_unsolicited_neigh_learning(
     2. Run arp_update on the active ToR
     3. Confirm that the standby ToR learned the entry and it is REACHABLE
     """
-    if ip_address(neighbor_ip).version == 6 and lower_tor_host.facts["asic_type"] == "vs":
+    neighbor_ip = selected_mux_port[1]
+    if ip_address(neighbor_ip).version == 6 and rand_unselected_dut.facts["asic_type"] == "vs":
         pytest.skip("Temporarily skipped to let the sonic-swss submodule be updated.")
     ping_cmd = "timeout 0.2 ping -c1 -W1 -i0.2 -n -q {}".format(neighbor_ip)
 
