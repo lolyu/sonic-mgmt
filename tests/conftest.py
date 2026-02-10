@@ -115,7 +115,8 @@ pytest_plugins = ('tests.common.plugins.ptfadapter',
                   'tests.common.plugins.conditional_mark',
                   'tests.common.plugins.random_seed',
                   'tests.common.plugins.memory_utilization',
-                  'tests.common.fixtures.duthost_utils')
+                  'tests.common.fixtures.duthost_utils',
+                  'tests.common.plugins.parallel_fixture')
 
 
 patch_ansible_worker_process()
@@ -793,8 +794,8 @@ def ptfhosts(enhance_inventory, ansible_adhoc, tbinfo, duthost, request):
         # when no ptf defined in testbed.csv
         # try to parse it from inventory
         ptf_host = duthost.host.options["inventory_manager"].get_host(duthost.hostname).get_vars()["ptf_host"]
-        _hosts.apend(PTFHost(ansible_adhoc, ptf_host, duthost, tbinfo,
-                             macsec_enabled=request.config.option.enable_macsec))
+        _hosts.append(PTFHost(ansible_adhoc, ptf_host, duthost, tbinfo,
+                              macsec_enabled=request.config.option.enable_macsec))
     return _hosts
 
 
